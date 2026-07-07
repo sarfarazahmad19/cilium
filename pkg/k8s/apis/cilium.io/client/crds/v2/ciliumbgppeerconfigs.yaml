@@ -55,6 +55,71 @@ spec:
 
                   If not specified, no authentication is used.
                 type: string
+              bfd:
+                description: |-
+                  BFD defines the Bidirectional Forwarding Detection (BFD) parameters
+                  for the peer. BFD provides fast failure detection between adjacent
+                  forwarding engines, independent of the BGP session.
+
+                  If not specified, BFD is disabled.
+                properties:
+                  desiredMinTxInterval:
+                    default: 1000000
+                    description: |-
+                      DesiredMinTxInterval is the desired minimum transmission interval
+                      for BFD control packets, in microseconds.
+
+                      This interval is the frequency at which the local system would like
+                      to send BFD control packets to the remote system.
+
+                      If not specified, defaults to 1000000 (1 second).
+                    format: int32
+                    maximum: 4294967295
+                    minimum: 1
+                    type: integer
+                  detectionMultiplier:
+                    default: 3
+                    description: |-
+                      DetectionMultiplier is the detection multiplier for BFD packets.
+
+                      The failure detection time is calculated as:
+                        detection_multiplier * required_min_rx_interval
+
+                      If not specified, defaults to 3.
+                    format: int32
+                    maximum: 255
+                    minimum: 2
+                    type: integer
+                  enabled:
+                    description: Enabled enables BFD for this peer.
+                    type: boolean
+                  requiredMinRxInterval:
+                    default: 1000000
+                    description: |-
+                      RequiredMinRxInterval is the required minimum receive interval
+                      for BFD control packets, in microseconds.
+
+                      This is the minimum interval between received BFD control packets
+                      that this system is willing to support. A remote peer transmitting
+                      at a faster rate will be detected and the BGP session will be torn down.
+
+                      If not specified, defaults to 1000000 (1 second).
+                    format: int32
+                    maximum: 4294967295
+                    minimum: 1
+                    type: integer
+                required:
+                - enabled
+                type: object
+                x-kubernetes-validations:
+                - message: detectionMultiplier must be between 2 and 255 when BFD
+                    is enabled
+                  rule: '!self.enabled || (self.detectionMultiplier >= 2 && self.detectionMultiplier
+                    <= 255)'
+                - message: desiredMinTxInterval and requiredMinRxInterval must be
+                    positive when BFD is enabled
+                  rule: '!self.enabled || (self.desiredMinTxInterval > 0 && self.requiredMinRxInterval
+                    > 0)'
               ebgpMultihop:
                 default: 1
                 description: |-

@@ -134,6 +134,19 @@ func (g *GoBGPServer) GetPeerState(ctx context.Context, req *types.GetPeerStateR
 			state.GracefulRestart.RestartTime = time.Duration(peer.GracefulRestart.RestartTime) * time.Second
 		}
 
+		if peer.State != nil && peer.State.BfdState != nil {
+			bfdState := peer.State.BfdState
+			state.BFDState = types.PeerBFDState{
+				SessionState:        toAgentBfdSessionState(bfdState.SessionState),
+				RemoteSessionState:  toAgentBfdSessionState(bfdState.RemoteSessionState),
+				LocalDiagnosticCode: toAgentBfdDiagnosticCode(bfdState.LocalDiagnosticCode),
+				RemoteDiagnosticCode: toAgentBfdDiagnosticCode(bfdState.RemoteDiagnosticCode),
+				LocalDiscriminator:  bfdState.LocalDiscriminator,
+				RemoteDiscriminator: bfdState.RemoteDiscriminator,
+				FailureTransitions:  bfdState.FailureTransitions,
+			}
+		}
+
 		res.Peers = append(res.Peers, state)
 	}
 
@@ -360,4 +373,44 @@ func (g *GoBGPServer) GetRoutePolicies(ctx context.Context) (*types.GetRoutePoli
 	return &types.GetRoutePoliciesResponse{
 		Policies: policies,
 	}, nil
+}
+
+func toAgentBfdSessionState(s gobgp.BfdSessionState) string {
+	switch s {
+	case gobgp.BfdSessionState_BFD_SESSION_STATE_UP:
+		return "up"
+	case gobgp.BfdSessionState_BFD_SESSION_STATE_DOWN:
+		return "down"
+	case gobgp.BfdSessionState_BFD_SESSION_STATE_INIT:
+		return "init"
+	case gobgp.BfdSessionState_BFD_SESSION_STATE_ADMIN_DOWN:
+		return "admin_down"
+	default:
+		return "unspecified"
+	}
+}
+
+func toAgentBfdDiagnosticCode(c gobgp.BfdDiagnosticCode) string {
+	switch c {
+	case gobgp.BfdDiagnosticCode_BFD_DIAGNOSTIC_CODE_NO_DIAGNOSTIC:
+		return "no_diagnostic"
+	case gobgp.BfdDiagnosticCode_BFD_DIAGNOSTIC_CODE_DETECTION_TIMEOUT:
+		return "detection_timeout"
+	case gobgp.BfdDiagnosticCode_BFD_DIAGNOSTIC_CODE_ECHO_FAILED:
+		return "echo_failed"
+	case gobgp.BfdDiagnosticCode_BFD_DIAGNOSTIC_CODE_NEIGHBOR_SIGNALED_SESSION_DOWN:
+		return "neighbor_signaled_session_down"
+	case gobgp.BfdDiagnosticCode_BFD_DIAGNOSTIC_CODE_FORWARDING_PLANE_RESET:
+		return "forwarding_plane_reset"
+	case gobgp.BfdDiagnosticCode_BFD_DIAGNOSTIC_CODE_PATH_DOWN:
+		return "path_down"
+	case gobgp.BfdDiagnosticCode_BFD_DIAGNOSTIC_CODE_CONCATENATED_PATH_DOWN:
+		return "concatenated_path_down"
+	case gobgp.BfdDiagnosticCode_BFD_DIAGNOSTIC_CODE_ADMINISTRATIVELY_DOWN:
+		return "administratively_down"
+	case gobgp.BfdDiagnosticCode_BFD_DIAGNOSTIC_CODE_REVERSE_CONCATENATED_PATH_DOWN:
+		return "reverse_concatenated_path_down"
+	default:
+		return "unknown"
+	}
 }

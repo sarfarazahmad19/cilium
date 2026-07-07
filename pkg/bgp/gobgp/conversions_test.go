@@ -258,6 +258,58 @@ func TestToGoBGPPeer(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "BFD Enabled",
+			neighbor: &types.Neighbor{
+				Address: netip.MustParseAddr("10.0.0.1"),
+				BFD: &types.NeighborBFD{
+					Enabled:                true,
+					DesiredMinTxInterval:   500000,
+					RequiredMinRxInterval: 1000000,
+					DetectionMultiplier:   3,
+				},
+			},
+			expected: &gobgp.Peer{
+				Conf: &gobgp.PeerConf{
+					NeighborAddress: "10.0.0.1",
+				},
+				Bfd: &gobgp.BfdPeerConfig{
+					Enabled:                  true,
+					DesiredMinimumTxInterval: 500000,
+					RequiredMinimumReceive:   1000000,
+					DetectionMultiplier:      3,
+				},
+				AfiSafis: defaultAfiSafi,
+			},
+		},
+		{
+			name: "BFD Nil",
+			neighbor: &types.Neighbor{
+				Address: netip.MustParseAddr("10.0.0.1"),
+				BFD:     nil,
+			},
+			expected: &gobgp.Peer{
+				Conf: &gobgp.PeerConf{
+					NeighborAddress: "10.0.0.1",
+				},
+				AfiSafis: defaultAfiSafi,
+			},
+		},
+		{
+			name: "BFD Disabled",
+			neighbor: &types.Neighbor{
+				Address: netip.MustParseAddr("10.0.0.1"),
+				BFD: &types.NeighborBFD{
+					Enabled: false,
+				},
+			},
+			expected: &gobgp.Peer{
+				Conf: &gobgp.PeerConf{
+					NeighborAddress: "10.0.0.1",
+				},
+				AfiSafis: defaultAfiSafi,
+			},
+		},
 	}
 
 	for _, tt := range tests {

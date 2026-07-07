@@ -362,6 +362,17 @@ func (r *StatusReconciler) getInstanceStatus(ctx context.Context, instance *inst
 		return nil, err
 	}
 
+	// get BFD state via GetPeerState (GetPeerStateLegacy doesn't include BFD)
+	bfdStateByAddr := make(map[string]types.PeerBFDState)
+	bfdPeerState, err := instance.Router.GetPeerState(ctx, &types.GetPeerStateRequest{})
+	if err == nil {
+		for _, p := range bfdPeerState.Peers {
+			if p.BFDState.SessionState != "" {
+				bfdStateByAddr[p.Address.String()] = p.BFDState
+			}
+		}
+	}
+
 	for _, configuredPeers := range instance.Config.Peers {
 		if configuredPeers.PeerASN == nil || configuredPeers.PeerAddress == nil {
 			continue
@@ -410,6 +421,19 @@ func (r *StatusReconciler) getInstanceStatus(ctx context.Context, instance *inst
 
 			// peer status updated, no need to iterate further
 			break
+		}
+
+		// populate BFD state if available
+		if bfd, ok := bfdStateByAddr[*configuredPeers.PeerAddress]; ok {
+			peerStatus.BFDState = &v2.CiliumBGPBFDState{
+				SessionState:        ptr.To[string](bfd.SessionState),
+				RemoteSessionState:  ptr.To[string](bfd.RemoteSessionState),
+				LocalDiagnosticCode: ptr.To[string](bfd.LocalDiagnosticCode),
+				RemoteDiagnosticCode: ptr.To[string](bfd.RemoteDiagnosticCode),
+				LocalDiscriminator:  ptr.To[uint32](bfd.LocalDiscriminator),
+				RemoteDiscriminator: ptr.To[uint32](bfd.RemoteDiscriminator),
+				FailureTransitions:  ptr.To[uint64](bfd.FailureTransitions),
+			}
 		}
 
 		res.PeerStatuses = append(res.PeerStatuses, peerStatus)

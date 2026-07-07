@@ -557,6 +557,7 @@ func ToGoBGPPeer(n *types.Neighbor, oldPeer *gobgp.Peer, v4 bool) *gobgp.Peer {
 	newPeer.Transport = toGoBGPTransport(n.Transport, oldPeer, v4)
 	newPeer.GracefulRestart = toGoBGPGracefulRestart(n.GracefulRestart)
 	newPeer.AfiSafis = toGoBGPAfiSafi(n.AfiSafis, newPeer.GracefulRestart)
+	newPeer.Bfd = toGoBGPBFD(n.BFD)
 
 	return newPeer
 }
@@ -711,4 +712,16 @@ func toGoBGPAfiSafi(fams []*types.Family, gr *gobgp.GracefulRestart) []*gobgp.Af
 		afisafis = append(afisafis, afisafi)
 	}
 	return afisafis
+}
+
+func toGoBGPBFD(n *types.NeighborBFD) *gobgp.BfdPeerConfig {
+	if n == nil || !n.Enabled {
+		return nil
+	}
+	return &gobgp.BfdPeerConfig{
+		Enabled:                  true,
+		DesiredMinimumTxInterval: n.DesiredMinTxInterval,
+		RequiredMinimumReceive:   n.RequiredMinRxInterval,
+		DetectionMultiplier:      n.DetectionMultiplier,
+	}
 }

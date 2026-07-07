@@ -106,6 +106,15 @@ type CiliumBGPPeerConfigSpec struct {
 	// +kubebuilder:default=1
 	EBGPMultihop *int32 `json:"ebgpMultihop,omitempty"`
 
+	// BFD defines the Bidirectional Forwarding Detection (BFD) parameters
+	// for the peer. BFD provides fast failure detection between adjacent
+	// forwarding engines, independent of the BGP session.
+	//
+	// If not specified, BFD is disabled.
+	//
+	// +kubebuilder:validation:Optional
+	BFD *CiliumBGPBFD `json:"bfd,omitempty"`
+
 	// Families, if provided, defines a set of AFI/SAFIs the speaker will
 	// negotiate with it's peer.
 	//
@@ -265,6 +274,59 @@ func (gr *CiliumBGPNeighborGracefulRestart) SetDefaults() {
 	if gr.RestartTimeSeconds == nil || *gr.RestartTimeSeconds == 0 {
 		gr.RestartTimeSeconds = ptr.To[int32](DefaultBGPGRRestartTimeSeconds)
 	}
+}
+
+// CiliumBGPBFD defines BFD configuration for a BGP peer.
+//
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (self.detectionMultiplier >= 2 && self.detectionMultiplier <= 255)", message="detectionMultiplier must be between 2 and 255 when BFD is enabled"
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (self.desiredMinTxInterval > 0 && self.requiredMinRxInterval > 0)", message="desiredMinTxInterval and requiredMinRxInterval must be positive when BFD is enabled"
+type CiliumBGPBFD struct {
+	// Enabled enables BFD for this peer.
+	//
+	// +kubebuilder:validation:Required
+	Enabled bool `json:"enabled"`
+
+	// DesiredMinTxInterval is the desired minimum transmission interval
+	// for BFD control packets, in microseconds.
+	//
+	// This interval is the frequency at which the local system would like
+	// to send BFD control packets to the remote system.
+	//
+	// If not specified, defaults to 1000000 (1 second).
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=4294967295
+	// +kubebuilder:default=1000000
+	DesiredMinTxInterval *uint32 `json:"desiredMinTxInterval,omitempty"`
+
+	// RequiredMinRxInterval is the required minimum receive interval
+	// for BFD control packets, in microseconds.
+	//
+	// This is the minimum interval between received BFD control packets
+	// that this system is willing to support. A remote peer transmitting
+	// at a faster rate will be detected and the BGP session will be torn down.
+	//
+	// If not specified, defaults to 1000000 (1 second).
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=4294967295
+	// +kubebuilder:default=1000000
+	RequiredMinRxInterval *uint32 `json:"requiredMinRxInterval,omitempty"`
+
+	// DetectionMultiplier is the detection multiplier for BFD packets.
+	//
+	// The failure detection time is calculated as:
+	//   detection_multiplier * required_min_rx_interval
+	//
+	// If not specified, defaults to 3.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=2
+	// +kubebuilder:validation:Maximum=255
+	// +kubebuilder:default=3
+	DetectionMultiplier *uint32 `json:"detectionMultiplier,omitempty"`
 }
 
 func (p *CiliumBGPPeerConfigSpec) SetDefaults() {

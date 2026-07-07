@@ -263,6 +263,83 @@ func TestToNeighbor(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "BFD Enabled with Defaults",
+			nodePeer: &v2.CiliumBGPNodePeer{
+				PeerAddress: ptr.To("10.0.0.1"),
+				PeerASN:     ptr.To(int64(64512)),
+			},
+			peerConfig: &v2.CiliumBGPPeerConfigSpec{
+				BFD: &v2.CiliumBGPBFD{
+					Enabled: true,
+				},
+			},
+			expected: &Neighbor{
+				Address: netip.MustParseAddr("10.0.0.1"),
+				ASN:     64512,
+				BFD: &NeighborBFD{
+					Enabled:                true,
+					DesiredMinTxInterval:   1000000,
+					RequiredMinRxInterval: 1000000,
+					DetectionMultiplier:   3,
+				},
+			},
+		},
+		{
+			name: "BFD Enabled with Custom Values",
+			nodePeer: &v2.CiliumBGPNodePeer{
+				PeerAddress: ptr.To("10.0.0.1"),
+				PeerASN:     ptr.To(int64(64512)),
+			},
+			peerConfig: &v2.CiliumBGPPeerConfigSpec{
+				BFD: &v2.CiliumBGPBFD{
+					Enabled:               true,
+					DesiredMinTxInterval:  ptr.To[uint32](500000),
+					RequiredMinRxInterval: ptr.To[uint32](2000000),
+					DetectionMultiplier:   ptr.To[uint32](5),
+				},
+			},
+			expected: &Neighbor{
+				Address: netip.MustParseAddr("10.0.0.1"),
+				ASN:     64512,
+				BFD: &NeighborBFD{
+					Enabled:                true,
+					DesiredMinTxInterval:   500000,
+					RequiredMinRxInterval: 2000000,
+					DetectionMultiplier:   5,
+				},
+			},
+		},
+		{
+			name: "BFD Disabled",
+			nodePeer: &v2.CiliumBGPNodePeer{
+				PeerAddress: ptr.To("10.0.0.1"),
+				PeerASN:     ptr.To(int64(64512)),
+			},
+			peerConfig: &v2.CiliumBGPPeerConfigSpec{
+				BFD: &v2.CiliumBGPBFD{
+					Enabled: false,
+				},
+			},
+			expected: &Neighbor{
+				Address: netip.MustParseAddr("10.0.0.1"),
+				ASN:     64512,
+			},
+		},
+		{
+			name: "BFD Nil",
+			nodePeer: &v2.CiliumBGPNodePeer{
+				PeerAddress: ptr.To("10.0.0.1"),
+				PeerASN:     ptr.To(int64(64512)),
+			},
+			peerConfig: &v2.CiliumBGPPeerConfigSpec{
+				BFD: nil,
+			},
+			expected: &Neighbor{
+				Address: netip.MustParseAddr("10.0.0.1"),
+				ASN:     64512,
+			},
+		},
 	}
 	for _, tt := range table {
 		t.Run(tt.name, func(t *testing.T) {
