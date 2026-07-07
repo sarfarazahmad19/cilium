@@ -510,3 +510,31 @@ These are generic and require no BFD-specific logic:
 | `vendor/.../gobgp/v4/pkg/server/grpc_server.go` | `newBfdConfigFromAPIStruct()` converts protobuf → internal config |
 | `vendor/.../gobgp/v4/pkg/config/oc/bgp_configs.go` | `BfdConfig`, `BfdState` OC model structs |
 | `vendor/.../gobgp/v4/pkg/packet/bfd/bfd.go` | Wire protocol: `BFDHeader` marshal/unmarshal |
+
+---
+
+## Known Limitations
+
+### Multi-instance BFD port conflict
+
+GoBGP creates one `bfdServer` per `BgpServer` instance, each binding UDP port 3784 (`vendor/.../gobgp/v4/pkg/server/server.go:66`, `bfd_server.go:240`). When multiple BGP instances run on the same node, the second instance's BFD listener fails with EADDRINUSE (error is only logged, not propagated to Cilium). BFD silently stops working for the second instance's peers.
+
+**Not a concern** for the standard single-instance-per-node topology (e.g., each node peers with TOR switches). Affects only multi-instance setups.
+
+### No BFD authentication
+
+GoBGP's BFD implementation does not support BFD authentication (RFC 5880 §6.7). This is consistent with GoBGP upstream and not a Cilium gap, but noted for security-conscious deployments.
+
+---
+
+## Future Work
+
+| Area | Description |
+|------|-------------|
+| **Metrics** | Expose BFD session state (Up/Down/Init), per-peer packet counters (rx/tx/drop), and session flaps as Prometheus metrics alongside existing BGP metrics in `pkg/bgp/metrics/`. GoBGP already tracks `bfdServerStats` (rxPacket, rxDrop, rxError) and `bfdPeerStats` (tx/rx, expired). |
+| **CRD codegen automation** | Adding new CRD types/fields requires regenerating `zz_generated.deepcopy.go` (via `make generate-k8s-api`) and CRD YAML at `pkg/k8s/apis/cilium.io/client/crds/v2/` (via `controller-gen`). Document the exact commands needed. |
+| **Validation** | Add kubebuilder validation markers (`+kubebuilder:validation:Minimum=2` on `DetectionMultiplier`) and CEL rules (multiplier × rxInterval ≥ txInterval) following the existing `XValidation` pattern on `CiliumBGPTimers` (`bgp_peer_types.go:197`). |
+| **Tests** | Unit tests following `pkg/bgp/gobgp/server_test.go` pattern (create server, add peer with BFD, verify state). Script tests following `pkg/bgp/test/testdata/*.txtar` pattern — may need new script commands for BFD state verification. |
+| **Documentation** | Update `Documentation/network/bgp-control-plane/bgp-control-plane-configuration.rst` with BFD section, YAML examples, behavior notes, and troubleshooting. |
+| **ECMP / multi-hop BFD** | BFD for multi-hop BGP sessions (RFC 5882) and integration with ECMP next-hop tracking. |
+| **eBPF datapath BFD** | As originally proposed in issue #22394, a cilium-native eBPF-based BFD implementation for sub-millisecond failure detection in the datapath, decoupled from BGP. |
