@@ -443,13 +443,100 @@ NeighborReconciler.Reconcile()  [priority 110, runs last]
                     ├── Starts tx timer (sends BFD control packets)
                     ├── Starts rx timer (expects packets from peer)
                     └── Runs BFD state machine: DOWN→INIT→UP
-                          │
-                          ▼
-                        On failure: ResetPeer(addr, soft=false)
-                          "BFD is down"
-                          │
-                          ▼
-                        BGP session drops, routes withdrawn
+```
+
+### Failure path — BFD detects peer unreachable
+
+When BFD detects a failure (detection timeout or remote peer signals Down/AdminDown), the following chain executes:
+
+```
+BFD detection timer fires (no packets within multiplier × rxInterval)
+  │  bfd_peer.go:310  expiry() — logs "Expired"
+  OR
+Remote peer sends BFD Down/AdminDown
+  │  bfd_peer.go:269  remoteDown() — logs "Remote peer signaled BFD down"
+  │
+  ▼
+bfdPeer.resetPeer()                          [bfd_peer.go:339]
+  │  Calls BgpServer.ResetPeer(ctx, &ResetPeerRequest{
+  │    Address:       peerAddress,
+  │    Communication: "BFD is down",
+  │    Soft:          false,                  ← hard reset, not graceful
+  │  })
+  ▼
+BgpServer.ResetPeer() → sendNotification()  [server.go:3926→3901]
+  │  Creates BGP NOTIFICATION message:
+  │    Error Code:    CEASE (6)
+  │    Error Subcode: ADMINISTRATIVE_RESET (4)
+  │    Data:          "BFD is down"
+  │  Sends via peer.fsm.notification channel
+  ▼
+FSM established() processes notification     [fsm.go:2046]
+  │  Writes BGP NOTIFICATION on TCP wire
+  │  conn.Close() — TCP connection torn down
+  │  Returns BGP_FSM_IDLE with reason fsmNotificationSent
+  ▼
+handleFSMMessage() — PeerDown processing     [server.go:1568]
+  │
+  ├── peer.DropAll(dropFamilies)             [peer.go:762]
+  │     Clears ALL routes from adj-RIB-in
+  │
+  ├── resetAdvertisedRoutes(peer)            [server.go:2004]
+  │     Clears all routes from adj-RIB-out
+  │
+  └── propagateUpdate(peer, withdrawnPaths)  [server.go:1199]
+        Applies withdrawals to global RIB
+        → Best-path recalculation
+        → Withdrawals propagated to OTHER peers
+```
+
+### Cilium state notification (async)
+
+GoBGP notifies Cilium asynchronously after the failure:
+
+```
+GoBGP broadcastPeerState()                   [server.go:1565]
+  │  Triggers peerCallback registered by Cilium
+  ▼
+gobgp/server.go:166  peerCallback fires on PEER_EVENT_STATE
+  │  Non-blocking send to StateNotification channel
+  ▼
+state_tracker.go:21  trackInstanceStateChange() goroutine
+  │  Inserts instance into pendingInstances set
+  │  Signals reconcileSignal channel
+  ▼
+state_tracker.go:57  reconcileState()
+  │  Calls reconcileInstanceState() for each pending instance
+  ▼
+crd_status.go:365  StatusReconciler
+  │  Polls GetPeerStateLegacy() — PeeringState now "idle"
+  │  Polls GetPeerState() — BFD session state now "down"
+  │  Updates CiliumBGPNodeConfigStatus CRD
+  ▼
+kubectl get ciliumbgpnodeconfig -o json
+  → bfdState.sessionState: "idle"
+```
+
+### What happens to routes in the datapath
+
+The route withdrawal propagates through Cilium's route management:
+
+```
+GoBGP global RIB updated (routes withdrawn)
+  │
+  ▼
+GoBGP watcher notifies path changes          [gobgp/server.go]
+  │
+  ▼
+Cilium route reconciler processes withdrawals
+  │
+  ▼
+Linux FIB / eBPF datapath updated
+  │  Routes removed from kernel routing table
+  │  Traffic to failed peer is blackholed or rerouted
+  ▼
+Sub-second failure detection → sub-second route withdrawal
+(vs. 30-90s with BGP hold timers alone)
 ```
 
 ## Reverse path (state → user)
