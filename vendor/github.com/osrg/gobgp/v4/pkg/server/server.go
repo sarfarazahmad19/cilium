@@ -847,9 +847,13 @@ func (s *BgpServer) toConfig(peer *peer, getAdvertised bool) *oc.Neighbor {
 		if err == nil {
 			st := &bfdPeer.state
 			conf.Bfd.State.SessionState = apiBfdSessionStateToOC(st.SessionState)
+			conf.Bfd.State.RemoteSessionState = apiBfdSessionStateToOC(st.RemoteSessionState)
 			conf.Bfd.State.LastFailureTime = st.LastFailureTime
 			conf.Bfd.State.FailureTransitions = st.FailureTransitions
 			conf.Bfd.State.LocalDiscriminator = st.LocalDiscriminator
+			conf.Bfd.State.RemoteDiscriminator = st.RemoteDiscriminator
+			conf.Bfd.State.LocalDiagnosticCode = apiBfdDiagnosticCodeToOC(st.LocalDiagnosticCode)
+			conf.Bfd.State.RemoteDiagnosticCode = apiBfdDiagnosticCodeToOC(st.RemoteDiagnosticCode)
 			if st.BfdAsync != nil {
 				conf.Bfd.State.BfdAsync.TransmittedPackets = st.BfdAsync.TransmittedPackets
 				conf.Bfd.State.BfdAsync.ReceivedPackets = st.BfdAsync.ReceivedPackets
@@ -3507,6 +3511,13 @@ func apiBfdSessionStateToOC(state api.BfdSessionState) oc.BfdSessionState {
 	default:
 		return oc.BFD_SESSION_STATE_DOWN
 	}
+}
+
+func apiBfdDiagnosticCodeToOC(code api.BfdDiagnosticCode) oc.BfdDiagnosticCode {
+	if c, ok := oc.IntToBfdDiagnosticCodeMap[int(code)]; ok {
+		return c
+	}
+	return oc.BFD_DIAGNOSTIC_CODE_NO_DIAGNOSTIC
 }
 
 func (s *BgpServer) updateBfdPeer(

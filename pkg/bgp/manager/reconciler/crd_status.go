@@ -430,9 +430,9 @@ func (r *StatusReconciler) getInstanceStatus(ctx context.Context, instance *inst
 				RemoteSessionState:  ptr.To[string](bfd.RemoteSessionState),
 				LocalDiagnosticCode: ptr.To[string](bfd.LocalDiagnosticCode),
 				RemoteDiagnosticCode: ptr.To[string](bfd.RemoteDiagnosticCode),
-				LocalDiscriminator:  ptr.To[uint32](bfd.LocalDiscriminator),
-				RemoteDiscriminator: ptr.To[uint32](bfd.RemoteDiscriminator),
-				FailureTransitions:  ptr.To[uint64](bfd.FailureTransitions),
+				LocalDiscriminator:  ptr.To[int64](int64(bfd.LocalDiscriminator)),
+				RemoteDiscriminator: ptr.To[int64](int64(bfd.RemoteDiscriminator)),
+				FailureTransitions:  ptr.To[int64](int64(bfd.FailureTransitions)),
 			}
 		}
 

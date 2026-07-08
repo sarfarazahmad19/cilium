@@ -55,6 +55,10 @@ type bfdPeer struct {
 	rxInterval        time.Duration
 	txInterval        time.Duration
 
+	remoteSessionState   atomic.Int32
+	remoteDiagnosticCode atomic.Int32
+	failureTransitions   atomic.Uint64
+
 	eventStart    *time.Ticker
 	eventRxPacket chan *bfd.BFDHeader
 	eventTx       *time.Ticker
@@ -291,6 +295,10 @@ func (p *bfdPeer) rxPacket(h *bfd.BFDHeader) {
 
 	p.stats.rxPacket.Add(1)
 
+	// Capture remote state and diagnostic from incoming packet
+	p.remoteSessionState.Store(int32(h.State))
+	p.remoteDiagnosticCode.Store(int32(h.Diagnostic))
+
 	// NOTE: remote DesiredMinTxInterval and RequiredMinRxInterval ignored
 
 	switch h.State {
@@ -445,6 +453,7 @@ func (p *bfdPeer) setStateDown() {
 		slog.String("Peer", p.peerAddress.String()),
 	)
 
+	p.failureTransitions.Add(1)
 	p.state.Store(int32(api.BfdSessionState_BFD_SESSION_STATE_DOWN))
 	p.yourDiscriminator = 0
 

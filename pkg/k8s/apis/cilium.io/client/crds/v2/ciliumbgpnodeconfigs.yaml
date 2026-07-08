@@ -218,7 +218,7 @@ spec:
                               localDiscriminator:
                                 description: LocalDiscriminator is the local BFD session
                                   discriminator.
-                                format: int32
+                                format: int64
                                 type: integer
                               remoteDiagnosticCode:
                                 description: |-
@@ -228,7 +228,7 @@ spec:
                               remoteDiscriminator:
                                 description: RemoteDiscriminator is the remote BFD
                                   session discriminator.
-                                format: int32
+                                format: int64
                                 type: integer
                               remoteSessionState:
                                 description: |-

@@ -572,4 +572,14 @@ func TestGetPeerStateWithBFD(t *testing.T) {
 
 	// BFD session won't be UP without a real peer, but the state struct should exist
 	// Verify the peer has BFD configured by checking the AddNeighbor worked with BFD config
+	bfdState := peer.BFDState
+
+	// Remote discriminator should be 0 (no packets received)
+	require.Equal(t, uint32(0), bfdState.RemoteDiscriminator)
+
+	// Remote diagnostic should be no_diagnostic (no packets received)
+	require.Equal(t, "no_diagnostic", bfdState.RemoteDiagnosticCode)
+
+	// No failure transitions yet (session started in DOWN, never transitioned)
+	require.Equal(t, uint64(0), bfdState.FailureTransitions)
 }

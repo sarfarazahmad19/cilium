@@ -265,18 +265,18 @@ type CiliumBGPBFDState struct {
 	// LocalDiscriminator is the local BFD session discriminator.
 	//
 	// +kubebuilder:validation:Optional
-	LocalDiscriminator *uint32 `json:"localDiscriminator,omitempty"`
+	LocalDiscriminator *int64 `json:"localDiscriminator,omitempty"`
 
 	// RemoteDiscriminator is the remote BFD session discriminator.
 	//
 	// +kubebuilder:validation:Optional
-	RemoteDiscriminator *uint32 `json:"remoteDiscriminator,omitempty"`
+	RemoteDiscriminator *int64 `json:"remoteDiscriminator,omitempty"`
 
 	// FailureTransitions is the number of times the BFD session has
 	// transitioned to the DOWN state.
 	//
 	// +kubebuilder:validation:Optional
-	FailureTransitions *uint64 `json:"failureTransitions,omitempty"`
+	FailureTransitions *int64 `json:"failureTransitions,omitempty"`
 }
 
 type BGPFamilyRouteCount struct {

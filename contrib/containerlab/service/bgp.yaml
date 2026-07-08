@@ -40,9 +40,9 @@ spec:
     restartTimeSeconds: 15
   bfd:
     enabled: true
-    desiredMinTxInterval: 300000
-    requiredMinRxInterval: 300000
-    detectionMultiplier: 3
+    minimumSendInterval: 300000
+    minimumRecvInterval: 300000
+    multiplier: 3
   families:
     - afi: ipv4
       safi: unicast
