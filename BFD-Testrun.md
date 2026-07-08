@@ -473,7 +473,106 @@ This forces FRR to bind its BFD UDP socket to the loopback, so source IP in outg
 | `pkg/bgp/gobgp/conversions_test.go` | 3 BFD cases: enabled, nil, disabled |
 | `pkg/bgp/gobgp/state_test.go` | TestToAgentBfdSessionState (6 cases), TestToAgentBfdDiagnosticCode (11 cases), TestGetPeerStateWithBFD (integration) |
 
-## 5. Reproduction Steps
+## 5. Failure Detection Demo
+
+### 5.1 Test: Kill BFD daemon on FRR
+
+With BGP+BFD fully operational, we killed the BFD daemon on FRR while leaving BGP running:
+
+```bash
+# Kill BFD daemon (BGP stays alive)
+docker exec clab-bgp-cplane-dev-service-router0 bash -c "kill \$(cat /var/run/frr/bfdd.pid)"
+```
+
+### 5.2 Timeline of Events
+
+```
+02:36:35  BGP: established (9s uptime), BFD: up on both nodes
+02:36:36  *Kill bfdd* — FRR kernel detects process death, bfdd sends BFD AdminDown
+02:36:36  GoBGP: "Remote peer signaled BFD down"  (instant detection)
+02:36:36  GoBGP: "Set state to DOWN"
+02:36:36  GoBGP: sent BGP NOTIFICATION "BFD is down" (Code=6, Subcode=4, Administrative Reset)
+02:36:36  FSM: ESTABLISHED → IDLE (BGP session torn down)
+02:36:38  cilium bgp peers: idle — routes withdrawn
+```
+
+**Total failure-to-withdrawal: <2 seconds.**
+
+### 5.3 What Happened in the Code
+
+```
+BFD expiry timer fires / remote signals Down
+  → bfd_peer.go:expiry() or remoteDown()
+  → resetPeer(): calls BgpServer.ResetPeer(Soft=false, Communication="BFD is down")
+  → BgpServer sends BGP NOTIFICATION: Code=CEASE(6), Subcode=ADMINISTRATIVE_RESET(4)
+  → FSM: sends NOTIFICATION on TCP wire, closes TCP connection
+  → ESTABLISHED → IDLE
+  → handleFSMMessage(): withdraws ALL routes from peer's adj-RIB-in
+  → propagates withdrawals to global RIB → best-path recalculation
+  → GoBGP watcher notifies Cilium → CRD status updated to "idle"
+```
+
+### 5.4 Recovery
+
+Restart FRR, reconfigure BGP+BFD, and all sessions re-establish automatically:
+
+```bash
+docker exec clab-bgp-cplane-dev-service-router0 bash -c \
+  "bfdd -d && sleep 1 && /usr/lib/frr/zebra -d && /usr/lib/frr/bgpd -d"
+# Reconfigure BGP + BFD via vtysh (see Section 2)
+```
+
+Brief flap during recovery (DOWN → INIT → UP in <200ms).
+
+## 6. BFD vs. BGP Without BFD — Blackhole Avoidance
+
+### 6.1 The Problem: Silent Blackholes
+
+Without BFD, BGP relies on its **hold timer** (default 90 seconds) to detect a dead peer. During that window:
+
+```
+WITHOUT BFD:
+  Link/FRR dies
+  → BGP hold timer starts counting (90s default)
+  → For ~90s, Cilium nodes STILL have routes pointing to dead FRR
+  → Traffic sent toward FRR = BLACKHOLED silently
+  → After 90s, hold timer expires → BGP NOTIFICATION → routes withdrawn
+```
+
+The router continues forwarding packets into a dead link. Applications experience hangs or silent data loss.
+
+### 6.2 How BFD Solves This
+
+BFD uses lightweight UDP probes (every 300ms in our config) with sub-second detection:
+
+```
+WITH BFD:
+  Link/FRR dies
+  → BFD detects in ~900ms (3 × 300ms)
+  → GoBGP tears down BGP session immediately
+  → Routes withdrawn from RIB within ~1 second
+  → Traffic that would have been blackholed is instead:
+     - Dropped locally with ICMP unreachable (if no alternative path)
+     - Rerouted via backup path (if ECMP or redundant peers exist)
+```
+
+### 6.3 What BFD Actually Provides
+
+| Aspect | BGP alone | BGP + BFD |
+|--------|-----------|-----------|
+| **Detection time** | ~90s (hold timer) | **<1s** (900ms = 3×300ms) |
+| **Detection mechanism** | TCP keepalive timeout | Dedicated UDP probes (UDP 3784) |
+| **Detection scope** | Dead peer OR network partition | Dead peer OR network partition OR blackhole |
+| **Notification** | "Hold timer expired" | **"BFD is down"** (Cease/Administrative Reset) |
+| **Route withdrawal** | After ~90s delay | **Within 1 second** |
+| **Application impact** | 90s of hangs/timeouts | <1s of interruption |
+
+### 6.4 Topology Matters
+
+- **Single path (our lab)**: BFD detects fast → routes withdrawn fast → applications fail fast (ICMP unreachable). No silent blackhole, but no automatic reroute.
+- **Redundant paths (production)**: BFD detects fast → routes withdrawn fast → traffic fails over to backup path within seconds. This is where BFD truly shines.
+
+## 7. Reproduction Steps
 
 ```bash
 # 1. Build local images
@@ -509,7 +608,7 @@ cilium status --wait --namespace kube-system
 # 6. Apply BGP + BFD config
 kubectl apply -f contrib/containerlab/service/bgp.yaml
 
-# 7. Configure FRR BFD (with local-address fix)
+# 7. Configure FRR BFD (with local-address fix — see Section 4.1)
 docker exec clab-bgp-cplane-dev-service-router0 vtysh -c "
 conf t
 bfd
