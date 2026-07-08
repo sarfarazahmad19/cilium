@@ -296,8 +296,7 @@ type CiliumBGPBFD struct {
 	//
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=4294967295
-	// +kubebuilder:default=1000000
+	// +kubebuilder:validation:Maximum=2147483647
 	DesiredMinTxInterval *uint32 `json:"desiredMinTxInterval,omitempty"`
 
 	// RequiredMinRxInterval is the required minimum receive interval
@@ -311,8 +310,7 @@ type CiliumBGPBFD struct {
 	//
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=4294967295
-	// +kubebuilder:default=1000000
+	// +kubebuilder:validation:Maximum=2147483647
 	RequiredMinRxInterval *uint32 `json:"requiredMinRxInterval,omitempty"`
 
 	// DetectionMultiplier is the detection multiplier for BFD packets.
@@ -325,7 +323,6 @@ type CiliumBGPBFD struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Minimum=2
 	// +kubebuilder:validation:Maximum=255
-	// +kubebuilder:default=3
 	DetectionMultiplier *uint32 `json:"detectionMultiplier,omitempty"`
 }
 

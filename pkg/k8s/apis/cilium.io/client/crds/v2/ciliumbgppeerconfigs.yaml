@@ -64,7 +64,6 @@ spec:
                   If not specified, BFD is disabled.
                 properties:
                   desiredMinTxInterval:
-                    default: 1000000
                     description: |-
                       DesiredMinTxInterval is the desired minimum transmission interval
                       for BFD control packets, in microseconds.
@@ -74,11 +73,10 @@ spec:
 
                       If not specified, defaults to 1000000 (1 second).
                     format: int32
-                    maximum: 4294967295
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
                   detectionMultiplier:
-                    default: 3
                     description: |-
                       DetectionMultiplier is the detection multiplier for BFD packets.
 
@@ -94,7 +92,6 @@ spec:
                     description: Enabled enables BFD for this peer.
                     type: boolean
                   requiredMinRxInterval:
-                    default: 1000000
                     description: |-
                       RequiredMinRxInterval is the required minimum receive interval
                       for BFD control packets, in microseconds.
@@ -105,7 +102,7 @@ spec:
 
                       If not specified, defaults to 1000000 (1 second).
                     format: int32
-                    maximum: 4294967295
+                    maximum: 2147483647
                     minimum: 1
                     type: integer
                 required:
