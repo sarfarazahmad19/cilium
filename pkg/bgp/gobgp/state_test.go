@@ -537,10 +537,10 @@ func TestGetPeerStateWithBFD(t *testing.T) {
 			KeepaliveInterval: 3,
 		},
 		BFD: &types.NeighborBFD{
-			Enabled:                true,
-			DesiredMinTxInterval:   300000,
-			RequiredMinRxInterval: 300000,
-			DetectionMultiplier:   3,
+			Enabled:             true,
+			MinimumSendInterval: 300000,
+			MinimumRecvInterval: 300000,
+			Multiplier:          3,
 		},
 	}
 

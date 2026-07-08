@@ -196,6 +196,26 @@ func TestToGoBGPPeer(t *testing.T) {
 			},
 		},
 		{
+			name: "BindInterface",
+			neighbor: &types.Neighbor{
+				Address: netip.MustParseAddr("10.0.0.1"),
+				Transport: &types.NeighborTransport{
+					LocalAddress:  "10.0.0.2",
+					BindInterface: "eth0",
+				},
+			},
+			expected: &gobgp.Peer{
+				Conf: &gobgp.PeerConf{
+					NeighborAddress: "10.0.0.1",
+				},
+				Transport: &gobgp.Transport{
+					LocalAddress:  "10.0.0.2",
+					BindInterface: "eth0",
+				},
+				AfiSafis: defaultAfiSafi,
+			},
+		},
+		{
 			name: "GracefulRestart",
 			neighbor: &types.Neighbor{
 				Address: netip.MustParseAddr("10.0.0.1"),
@@ -263,10 +283,10 @@ func TestToGoBGPPeer(t *testing.T) {
 			neighbor: &types.Neighbor{
 				Address: netip.MustParseAddr("10.0.0.1"),
 				BFD: &types.NeighborBFD{
-					Enabled:                true,
-					DesiredMinTxInterval:   500000,
-					RequiredMinRxInterval: 1000000,
-					DetectionMultiplier:   3,
+					Enabled:             true,
+					MinimumSendInterval: 500000,
+					MinimumRecvInterval: 1000000,
+					Multiplier:          3,
 				},
 			},
 			expected: &gobgp.Peer{

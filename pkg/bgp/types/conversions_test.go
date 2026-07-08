@@ -81,6 +81,25 @@ func TestToNeighbor(t *testing.T) {
 			},
 		},
 		{
+			name: "BindInterface",
+			nodePeer: &v2.CiliumBGPNodePeer{
+				PeerAddress: ptr.To("fd00::1"),
+				PeerASN:     ptr.To(int64(64512)),
+			},
+			peerConfig: &v2.CiliumBGPPeerConfigSpec{
+				Transport: &v2.CiliumBGPTransport{
+					BindInterface: ptr.To("eth0"),
+				},
+			},
+			expected: &Neighbor{
+				Address: netip.MustParseAddr("fd00::1"),
+				ASN:     64512,
+				Transport: &NeighborTransport{
+					BindInterface: "eth0",
+				},
+			},
+		},
+		{
 			name: "Timers",
 			nodePeer: &v2.CiliumBGPNodePeer{
 				PeerAddress: ptr.To("fd00::1"),
@@ -278,10 +297,10 @@ func TestToNeighbor(t *testing.T) {
 				Address: netip.MustParseAddr("10.0.0.1"),
 				ASN:     64512,
 				BFD: &NeighborBFD{
-					Enabled:                true,
-					DesiredMinTxInterval:   1000000,
-					RequiredMinRxInterval: 1000000,
-					DetectionMultiplier:   3,
+					Enabled:             true,
+					MinimumSendInterval: 1000000,
+					MinimumRecvInterval: 1000000,
+					Multiplier:          3,
 				},
 			},
 		},
@@ -293,20 +312,20 @@ func TestToNeighbor(t *testing.T) {
 			},
 			peerConfig: &v2.CiliumBGPPeerConfigSpec{
 				BFD: &v2.CiliumBGPBFD{
-					Enabled:               true,
-					DesiredMinTxInterval:  ptr.To[uint32](500000),
-					RequiredMinRxInterval: ptr.To[uint32](2000000),
-					DetectionMultiplier:   ptr.To[uint32](5),
+					Enabled:             true,
+					MinimumSendInterval: ptr.To[uint32](500000),
+					MinimumRecvInterval: ptr.To[uint32](2000000),
+					Multiplier:          ptr.To[uint32](5),
 				},
 			},
 			expected: &Neighbor{
 				Address: netip.MustParseAddr("10.0.0.1"),
 				ASN:     64512,
 				BFD: &NeighborBFD{
-					Enabled:                true,
-					DesiredMinTxInterval:   500000,
-					RequiredMinRxInterval: 2000000,
-					DetectionMultiplier:   5,
+					Enabled:             true,
+					MinimumSendInterval: 500000,
+					MinimumRecvInterval: 2000000,
+					Multiplier:          5,
 				},
 			},
 		},

@@ -95,9 +95,10 @@ type Neighbor struct {
 }
 
 type NeighborTransport struct {
-	LocalAddress string
-	LocalPort    uint32
-	RemotePort   uint32
+	LocalAddress  string
+	LocalPort     uint32
+	RemotePort    uint32
+	BindInterface string
 }
 
 type NeighborEbgpMultihop struct {
@@ -116,10 +117,10 @@ type NeighborGracefulRestart struct {
 }
 
 type NeighborBFD struct {
-	Enabled           bool
-	DesiredMinTxInterval uint32
-	RequiredMinRxInterval uint32
-	DetectionMultiplier  uint32
+	Enabled             bool
+	MinimumSendInterval uint32
+	MinimumRecvInterval uint32
+	Multiplier          uint32
 }
 
 // SoftResetDirection defines the direction in which a BGP soft reset should be performed

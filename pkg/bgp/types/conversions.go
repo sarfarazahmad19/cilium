@@ -365,6 +365,9 @@ func toNeighborTransportV2(apiLocalAddress *string, apiTransport *v2.CiliumBGPTr
 		if apiTransport.PeerPort != nil {
 			transport.RemotePort = uint32(*apiTransport.PeerPort)
 		}
+		if apiTransport.BindInterface != nil {
+			transport.BindInterface = *apiTransport.BindInterface
+		}
 	}
 
 	return transport
@@ -389,22 +392,22 @@ func toNeighborBFDV2(apiBFD *v2.CiliumBGPBFD) *NeighborBFD {
 		Enabled: true,
 	}
 
-	if apiBFD.DesiredMinTxInterval != nil {
-		bfd.DesiredMinTxInterval = *apiBFD.DesiredMinTxInterval
+	if apiBFD.MinimumSendInterval != nil {
+		bfd.MinimumSendInterval = *apiBFD.MinimumSendInterval
 	} else {
-		bfd.DesiredMinTxInterval = 1000000
+		bfd.MinimumSendInterval = 1000000
 	}
 
-	if apiBFD.RequiredMinRxInterval != nil {
-		bfd.RequiredMinRxInterval = *apiBFD.RequiredMinRxInterval
+	if apiBFD.MinimumRecvInterval != nil {
+		bfd.MinimumRecvInterval = *apiBFD.MinimumRecvInterval
 	} else {
-		bfd.RequiredMinRxInterval = 1000000
+		bfd.MinimumRecvInterval = 1000000
 	}
 
-	if apiBFD.DetectionMultiplier != nil {
-		bfd.DetectionMultiplier = *apiBFD.DetectionMultiplier
+	if apiBFD.Multiplier != nil {
+		bfd.Multiplier = *apiBFD.Multiplier
 	} else {
-		bfd.DetectionMultiplier = 3
+		bfd.Multiplier = 3
 	}
 
 	return bfd

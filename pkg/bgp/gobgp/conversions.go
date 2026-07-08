@@ -659,6 +659,10 @@ func toGoBGPTransport(n *types.NeighborTransport, oldPeer *gobgp.Peer, v4 bool) 
 		transport.LocalAddress = n.LocalAddress
 	}
 
+	if n.BindInterface != "" {
+		transport.BindInterface = n.BindInterface
+	}
+
 	return transport
 }
 
@@ -720,8 +724,8 @@ func toGoBGPBFD(n *types.NeighborBFD) *gobgp.BfdPeerConfig {
 	}
 	return &gobgp.BfdPeerConfig{
 		Enabled:                  true,
-		DesiredMinimumTxInterval: n.DesiredMinTxInterval,
-		RequiredMinimumReceive:   n.RequiredMinRxInterval,
-		DetectionMultiplier:      n.DetectionMultiplier,
+		DesiredMinimumTxInterval: n.MinimumSendInterval,
+		RequiredMinimumReceive:   n.MinimumRecvInterval,
+		DetectionMultiplier:      n.Multiplier,
 	}
 }

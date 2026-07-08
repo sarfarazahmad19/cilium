@@ -358,26 +358,26 @@ func (in *CiliumBGPBFD) DeepEqual(other *CiliumBGPBFD) bool {
 	if in.Enabled != other.Enabled {
 		return false
 	}
-	if (in.DesiredMinTxInterval == nil) != (other.DesiredMinTxInterval == nil) {
+	if (in.MinimumSendInterval == nil) != (other.MinimumSendInterval == nil) {
 		return false
-	} else if in.DesiredMinTxInterval != nil {
-		if *in.DesiredMinTxInterval != *other.DesiredMinTxInterval {
+	} else if in.MinimumSendInterval != nil {
+		if *in.MinimumSendInterval != *other.MinimumSendInterval {
 			return false
 		}
 	}
 
-	if (in.RequiredMinRxInterval == nil) != (other.RequiredMinRxInterval == nil) {
+	if (in.MinimumRecvInterval == nil) != (other.MinimumRecvInterval == nil) {
 		return false
-	} else if in.RequiredMinRxInterval != nil {
-		if *in.RequiredMinRxInterval != *other.RequiredMinRxInterval {
+	} else if in.MinimumRecvInterval != nil {
+		if *in.MinimumRecvInterval != *other.MinimumRecvInterval {
 			return false
 		}
 	}
 
-	if (in.DetectionMultiplier == nil) != (other.DetectionMultiplier == nil) {
+	if (in.Multiplier == nil) != (other.Multiplier == nil) {
 		return false
-	} else if in.DetectionMultiplier != nil {
-		if *in.DetectionMultiplier != *other.DetectionMultiplier {
+	} else if in.Multiplier != nil {
+		if *in.Multiplier != *other.Multiplier {
 			return false
 		}
 	}
@@ -1261,6 +1261,14 @@ func (in *CiliumBGPTransport) DeepEqual(other *CiliumBGPTransport) bool {
 		return false
 	} else if in.SourceInterface != nil {
 		if *in.SourceInterface != *other.SourceInterface {
+			return false
+		}
+	}
+
+	if (in.BindInterface == nil) != (other.BindInterface == nil) {
+		return false
+	} else if in.BindInterface != nil {
+		if *in.BindInterface != *other.BindInterface {
 			return false
 		}
 	}

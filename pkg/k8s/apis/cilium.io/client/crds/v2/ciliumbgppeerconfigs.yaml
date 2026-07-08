@@ -63,37 +63,12 @@ spec:
 
                   If not specified, BFD is disabled.
                 properties:
-                  desiredMinTxInterval:
-                    description: |-
-                      DesiredMinTxInterval is the desired minimum transmission interval
-                      for BFD control packets, in microseconds.
-
-                      This interval is the frequency at which the local system would like
-                      to send BFD control packets to the remote system.
-
-                      If not specified, defaults to 1000000 (1 second).
-                    format: int32
-                    maximum: 2147483647
-                    minimum: 1
-                    type: integer
-                  detectionMultiplier:
-                    description: |-
-                      DetectionMultiplier is the detection multiplier for BFD packets.
-
-                      The failure detection time is calculated as:
-                        detection_multiplier * required_min_rx_interval
-
-                      If not specified, defaults to 3.
-                    format: int32
-                    maximum: 255
-                    minimum: 2
-                    type: integer
                   enabled:
                     description: Enabled enables BFD for this peer.
                     type: boolean
-                  requiredMinRxInterval:
+                  minimumRecvInterval:
                     description: |-
-                      RequiredMinRxInterval is the required minimum receive interval
+                      MinimumRecvInterval is the required minimum receive interval
                       for BFD control packets, in microseconds.
 
                       This is the minimum interval between received BFD control packets
@@ -105,17 +80,41 @@ spec:
                     maximum: 2147483647
                     minimum: 1
                     type: integer
+                  minimumSendInterval:
+                    description: |-
+                      MinimumSendInterval is the desired minimum transmission interval
+                      for BFD control packets, in microseconds.
+
+                      This interval is the frequency at which the local system would like
+                      to send BFD control packets to the remote system.
+
+                      If not specified, defaults to 1000000 (1 second).
+                    format: int32
+                    maximum: 2147483647
+                    minimum: 1
+                    type: integer
+                  multiplier:
+                    description: |-
+                      Multiplier is the detection multiplier for BFD packets.
+
+                      The failure detection time is calculated as:
+                        multiplier * minimumRecvInterval
+
+                      If not specified, defaults to 3.
+                    format: int32
+                    maximum: 255
+                    minimum: 2
+                    type: integer
                 required:
                 - enabled
                 type: object
                 x-kubernetes-validations:
-                - message: detectionMultiplier must be between 2 and 255 when BFD
-                    is enabled
-                  rule: '!self.enabled || (self.detectionMultiplier >= 2 && self.detectionMultiplier
+                - message: multiplier must be between 2 and 255 when BFD is enabled
+                  rule: '!self.enabled || (self.multiplier >= 2 && self.multiplier
                     <= 255)'
-                - message: desiredMinTxInterval and requiredMinRxInterval must be
-                    positive when BFD is enabled
-                  rule: '!self.enabled || (self.desiredMinTxInterval > 0 && self.requiredMinRxInterval
+                - message: minimumSendInterval and minimumRecvInterval must be positive
+                    when BFD is enabled
+                  rule: '!self.enabled || (self.minimumSendInterval > 0 && self.minimumRecvInterval
                     > 0)'
               ebgpMultihop:
                 default: 1
@@ -304,6 +303,15 @@ spec:
 
                   If not specified, the default transport parameters are used.
                 properties:
+                  bindInterface:
+                    description: |-
+                      BindInterface is the name of a local network interface to bind BGP and BFD
+                      sockets to using SO_BINDTODEVICE. This ensures that traffic uses the correct
+                      interface in multi-NIC environments, which is important for BFD to ensure
+                      source IP addresses match between BGP and BFD sessions.
+
+                      If not specified, sockets will be bound to all interfaces.
+                    type: string
                   peerPort:
                     default: 179
                     description: |-
@@ -325,6 +333,10 @@ spec:
                     type: string
                 type: object
             type: object
+            x-kubernetes-validations:
+            - message: BFD is not supported when ebgpMultihop is greater than 1
+              rule: '!has(self.bfd) || !self.bfd.enabled || !has(self.ebgpMultihop)
+                || self.ebgpMultihop <= 1'
           status:
             description: Status is the running status of the CiliumBGPPeerConfig
             properties:

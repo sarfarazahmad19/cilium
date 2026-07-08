@@ -63,6 +63,7 @@ type CiliumBGPPeerConfig struct {
 	Status CiliumBGPPeerConfigStatus `json:"status,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="!has(self.bfd) || !self.bfd.enabled || !has(self.ebgpMultihop) || self.ebgpMultihop <= 1",message="BFD is not supported when ebgpMultihop is greater than 1"
 type CiliumBGPPeerConfigSpec struct {
 	// Transport defines the BGP transport parameters for the peer.
 	//
@@ -193,6 +194,16 @@ type CiliumBGPTransport struct {
 	//
 	// +kubebuilder:validation:Optional
 	SourceInterface *string `json:"sourceInterface,omitempty"`
+
+	// BindInterface is the name of a local network interface to bind BGP and BFD
+	// sockets to using SO_BINDTODEVICE. This ensures that traffic uses the correct
+	// interface in multi-NIC environments, which is important for BFD to ensure
+	// source IP addresses match between BGP and BFD sessions.
+	//
+	// If not specified, sockets will be bound to all interfaces.
+	//
+	// +kubebuilder:validation:Optional
+	BindInterface *string `json:"bindInterface,omitempty"`
 }
 
 func (t *CiliumBGPTransport) SetDefaults() {
@@ -278,15 +289,15 @@ func (gr *CiliumBGPNeighborGracefulRestart) SetDefaults() {
 
 // CiliumBGPBFD defines BFD configuration for a BGP peer.
 //
-// +kubebuilder:validation:XValidation:rule="!self.enabled || (self.detectionMultiplier >= 2 && self.detectionMultiplier <= 255)", message="detectionMultiplier must be between 2 and 255 when BFD is enabled"
-// +kubebuilder:validation:XValidation:rule="!self.enabled || (self.desiredMinTxInterval > 0 && self.requiredMinRxInterval > 0)", message="desiredMinTxInterval and requiredMinRxInterval must be positive when BFD is enabled"
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (self.multiplier >= 2 && self.multiplier <= 255)", message="multiplier must be between 2 and 255 when BFD is enabled"
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (self.minimumSendInterval > 0 && self.minimumRecvInterval > 0)", message="minimumSendInterval and minimumRecvInterval must be positive when BFD is enabled"
 type CiliumBGPBFD struct {
 	// Enabled enables BFD for this peer.
 	//
 	// +kubebuilder:validation:Required
 	Enabled bool `json:"enabled"`
 
-	// DesiredMinTxInterval is the desired minimum transmission interval
+	// MinimumSendInterval is the desired minimum transmission interval
 	// for BFD control packets, in microseconds.
 	//
 	// This interval is the frequency at which the local system would like
@@ -297,9 +308,9 @@ type CiliumBGPBFD struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=2147483647
-	DesiredMinTxInterval *uint32 `json:"desiredMinTxInterval,omitempty"`
+	MinimumSendInterval *uint32 `json:"minimumSendInterval,omitempty"`
 
-	// RequiredMinRxInterval is the required minimum receive interval
+	// MinimumRecvInterval is the required minimum receive interval
 	// for BFD control packets, in microseconds.
 	//
 	// This is the minimum interval between received BFD control packets
@@ -311,19 +322,19 @@ type CiliumBGPBFD struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=2147483647
-	RequiredMinRxInterval *uint32 `json:"requiredMinRxInterval,omitempty"`
+	MinimumRecvInterval *uint32 `json:"minimumRecvInterval,omitempty"`
 
-	// DetectionMultiplier is the detection multiplier for BFD packets.
+	// Multiplier is the detection multiplier for BFD packets.
 	//
 	// The failure detection time is calculated as:
-	//   detection_multiplier * required_min_rx_interval
+	//   multiplier * minimumRecvInterval
 	//
 	// If not specified, defaults to 3.
 	//
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Minimum=2
 	// +kubebuilder:validation:Maximum=255
-	DetectionMultiplier *uint32 `json:"detectionMultiplier,omitempty"`
+	Multiplier *uint32 `json:"multiplier,omitempty"`
 }
 
 func (p *CiliumBGPPeerConfigSpec) SetDefaults() {
