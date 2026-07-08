@@ -473,56 +473,97 @@ This forces FRR to bind its BFD UDP socket to the loopback, so source IP in outg
 | `pkg/bgp/gobgp/conversions_test.go` | 3 BFD cases: enabled, nil, disabled |
 | `pkg/bgp/gobgp/state_test.go` | TestToAgentBfdSessionState (6 cases), TestToAgentBfdDiagnosticCode (11 cases), TestGetPeerStateWithBFD (integration) |
 
-## 5. Failure Detection Demo
+## 5. Failure Detection Demo (Verified)
 
-### 5.1 Test: Kill BFD daemon on FRR
+### 5.1 Test Setup
 
-With BGP+BFD fully operational, we killed the BFD daemon on FRR while leaving BGP running:
+With BGP+BFD fully operational, we added FRR-originated routes (`10.99.0.0/24` via `redistribute connected`) to verify route propagation and withdrawal. Then killed the BFD daemon on FRR:
 
 ```bash
+# Add FRR-originated routes to test withdrawal
+docker exec clab-bgp-cplane-dev-service-router0 vtysh -c "
+conf t
+interface lo
+ ip address 10.99.0.1/24
+exit
+router bgp 65000
+ redistribute connected
+exit
+"
+
 # Kill BFD daemon (BGP stays alive)
 docker exec clab-bgp-cplane-dev-service-router0 bash -c "kill \$(cat /var/run/frr/bfdd.pid)"
 ```
 
-### 5.2 Timeline of Events
+### 5.2 Verified Timeline
 
 ```
-02:36:35  BGP: established (9s uptime), BFD: up on both nodes
-02:36:36  *Kill bfdd* — FRR kernel detects process death, bfdd sends BFD AdminDown
-02:36:36  GoBGP: "Remote peer signaled BFD down"  (instant detection)
-02:36:36  GoBGP: "Set state to DOWN"
-02:36:36  GoBGP: sent BGP NOTIFICATION "BFD is down" (Code=6, Subcode=4, Administrative Reset)
-02:36:36  FSM: ESTABLISHED → IDLE (BGP session torn down)
-02:36:38  cilium bgp peers: idle — routes withdrawn
-```
+00:44:37.815  BFD: "Remote peer signaled BFD down" → "Set state to DOWN"
+              ← FRR's bfdd dies, sends BFD AdminDown to GoBGP
 
-**Total failure-to-withdrawal: <2 seconds.**
+00:44:37.815  BGP: sent NOTIFICATION "BFD is down" (Code=6, Subcode=4, Administrative Reset)
+              ← GoBGP immediately tears down BGP session
+
+00:44:37.816  BGP: ESTABLISHED → IDLE
+              ← Routes WITHDRAWN from adj-RIB-in at this moment
+              ← CRD status: bfdState.sessionState: down
+
+00:44:38-42   BFD: "Can't send UDP packet" (bfdd is dead, socket still open)
+
+00:44:42.817  BGP: IdleHoldTimer expired (5s) → IDLE → ACTIVE
+              ← GoBGP auto-reconnects! (BFD still DOWN)
+
+00:44:44.351  BGP: TCP connected → OPENCONFIRM → ESTABLISHED
+              ← BGP session re-established WITHOUT BFD
+
+00:44:44.352  Routes re-advertised: 10.1.0.0/24, fd00:10:1::/64
+              ← Withdrawal reversed after ~7 seconds
+```
 
 ### 5.3 What Happened in the Code
 
 ```
-BFD expiry timer fires / remote signals Down
-  → bfd_peer.go:expiry() or remoteDown()
+BFD detects remote down (bfd_peer.go:330)
   → resetPeer(): calls BgpServer.ResetPeer(Soft=false, Communication="BFD is down")
   → BgpServer sends BGP NOTIFICATION: Code=CEASE(6), Subcode=ADMINISTRATIVE_RESET(4)
   → FSM: sends NOTIFICATION on TCP wire, closes TCP connection
   → ESTABLISHED → IDLE
   → handleFSMMessage(): withdraws ALL routes from peer's adj-RIB-in
   → propagates withdrawals to global RIB → best-path recalculation
-  → GoBGP watcher notifies Cilium → CRD status updated to "idle"
+  → GoBGP watcher notifies Cilium → CRD status: bfdState.sessionState: down
+
+  ... 5 seconds later ...
+
+  BGP IdleHoldTimer fires → FSM: IDLE → ACTIVE → connects to FRR
+  → BGP re-establishes WITHOUT checking BFD state
+  → Routes re-advertised (withdrawal reversed)
 ```
 
-### 5.4 Recovery
+### 5.4 Key Finding: Route Withdrawal Is Temporary
 
-Restart FRR, reconfigure BGP+BFD, and all sessions re-establish automatically:
+**BFD-triggered route withdrawal happens but is reversed within ~7 seconds** because:
 
-```bash
-docker exec clab-bgp-cplane-dev-service-router0 bash -c \
-  "bfdd -d && sleep 1 && /usr/lib/frr/zebra -d && /usr/lib/frr/bgpd -d"
-# Reconfigure BGP + BFD via vtysh (see Section 2)
-```
+1. GoBGP's BGP FSM has an `IdleHoldTimer` (5s default) that auto-reconnects after a hard reset
+2. The reconnect logic does **not** check BFD session state before reconnecting
+3. Since FRR's `bgpd` is still alive and accepting TCP connections, BGP re-establishes
+4. Routes are re-advertised, undoing the withdrawal
 
-Brief flap during recovery (DOWN → INIT → UP in <200ms).
+This is a **GoBGP limitation**, not a Cilium limitation. In production BGP implementations (Cisco IOS, Junos, FRR):
+- BGP checks BFD state before attempting reconnection
+- If BFD is DOWN, BGP stays in IDLE until BFD comes back UP
+- This prevents route flapping during persistent failures
+
+### 5.5 Implications
+
+| Scenario | Behavior | Impact |
+|----------|----------|--------|
+| **Transient BFD flap** (<5s) | Routes withdrawn, then re-advertised | Brief route flap (~7s) |
+| **Persistent failure** (bfdd killed) | Routes withdrawn, BGP reconnects, routes re-advertised | **Route flap every ~7s** — BGP keeps reconnecting while BFD stays down |
+| **Link down** | TCP connection fails, BGP backs off | Routes stay withdrawn (TCP timeout) |
+
+For persistent BFD failures (like bfdd crash), this creates a **route flapping** scenario where BGP keeps re-establishing and routes keep being withdrawn/re-advertised. This is undesirable behavior that should be addressed by either:
+- Upstream GoBGP fix: Check BFD state before BGP reconnection
+- Cilium-level fix: Disable BGP auto-reconnect when BFD is configured and DOWN
 
 ## 6. BFD vs. BGP Without BFD — Blackhole Avoidance
 
@@ -632,3 +673,69 @@ cilium bgp peers                           # BGP established
 docker exec ... vtysh -c "show bfd peer"   # BFD up on both peers
 kubectl get ciliumbgpnodeconfig -o yaml    # bfdState.sessionState: up
 ```
+
+## 8. Bidirectional Test — FRR Detects Cilium Node Death
+
+### 8.1 Goal
+
+Verify that when a Cilium node dies, FRR's BFD detects the failure and withdraws the node's routes from the FRR routing table.
+
+### 8.2 Simulating Node Death
+
+ContainerLab keeps network namespaces alive even after `docker stop`/`docker kill`. To truly simulate a node death, we must bring down the FRR-side interface:
+
+```bash
+# This does NOT work — BFD stays UP because namespace survives:
+docker stop clab-bgp-cplane-dev-service-server1
+docker kill clab-bgp-cplane-dev-service-server1
+nsenter --net=/var/run/docker/netns/clab-bgp-cplane-dev-service-server1 -- kill -9 -1
+ip netns delete clab-bgp-cplane-dev-service-server1
+
+# This DOES work — kills the link at kernel level:
+docker exec clab-bgp-cplane-dev-service-router0 ip link set net1 down
+```
+
+### 8.3 Verified Timeline (FRR Side)
+
+```
+T+0ms     docker exec FRR ip link set net1 down
+          ← FRR-side veth goes DOWN, BFD packets stop
+
+T+~900ms  FRR BFD: "control detection time expired"
+          ← 3 × 300ms = 900ms detection window
+
+T+~900ms  FRR BFD: Status: down
+
+T+~900ms  FRR BGP: 10.1.1.0/24 loses *> flag (invalid/best)
+          ← Routes from dead node pulled from RIB
+
+T+~900ms  FRR BGP: PfxSnt drops from 7 → 5
+          ← Dead node's routes stop being advertised
+
+T+~90s    FRR BGP: TCP session finally drops (hold timer expiry)
+          ← BGP TCP lingers until hold timer (90s default)
+```
+
+### 8.4 Key Findings
+
+**FRR's `neighbor bfd` behavior:**
+- BFD detects failure in ~900ms (sub-second)
+- Routes from the dead node are **invalidated immediately** (lose best-path status)
+- Route **advertisements stop** (PfxSnt drops)
+- BGP TCP session **lingers** until hold timer expires — this is harmless since the routing table is already correct
+
+**Infrastructure caveat:**
+- `docker stop` ≠ real node death in ContainerLab
+- ContainerLab manages network namespaces independently from Docker containers
+- To simulate real node failure: must destroy the network link (`ip link set netX down`)
+
+### 8.5 Bidirectional Summary
+
+| Direction | Detection Time | Route Withdrawal | BGP Session |
+|-----------|---------------|-----------------|-------------|
+| **Cilium → FRR** (kill bfdd) | <1s | Routes withdrawn, re-advertised in ~7s (GoBGP auto-reconnects) | Auto-reconnects without checking BFD |
+| **FRR → Cilium** (kill node) | ~900ms | Routes invalidated, advertisements stop | Lingers until hold timer (90s) |
+
+Both directions show sub-second BFD detection. The asymmetry in BGP session behavior is due to:
+- **GoBGP**: Auto-reconnects without checking BFD state (limitation)
+- **FRR**: Holds BGP session until hold timer expires (correct behavior — routing table is already updated)
