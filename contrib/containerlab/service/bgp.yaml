@@ -38,6 +38,11 @@ spec:
   gracefulRestart:
     enabled: true
     restartTimeSeconds: 15
+  bfd:
+    enabled: true
+    minimumSendInterval: 300000
+    minimumRecvInterval: 300000
+    multiplier: 3
   families:
     - afi: ipv4
       safi: unicast

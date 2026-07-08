@@ -215,6 +215,12 @@ type CiliumBGPNodePeerStatus struct {
 	//
 	// +kubebuilder:validation:Optional
 	RouteCount []BGPFamilyRouteCount `json:"routeCount,omitempty"`
+
+	// BFDState is the state of the BFD session for this peer.
+	// Only present if BFD is configured.
+	//
+	// +kubebuilder:validation:Optional
+	BFDState *CiliumBGPBFDState `json:"bfdState,omitempty"`
 }
 
 // CiliumBGPTimersState is the state of the negotiated BGP timers for a peer.
@@ -228,6 +234,49 @@ type CiliumBGPTimersState struct {
 	//
 	// +kubebuilder:validation:Optional
 	AppliedKeepaliveSeconds *int32 `json:"appliedKeepaliveSeconds,omitempty"`
+}
+
+// CiliumBGPBFDState is the state of a BFD session for a BGP peer.
+type CiliumBGPBFDState struct {
+	// SessionState is the current state of the BFD session.
+	// Possible values: "up", "down", "init", "admin_down".
+	//
+	// +kubebuilder:validation:Optional
+	SessionState *string `json:"sessionState,omitempty"`
+
+	// RemoteSessionState is the state of the remote BFD session.
+	// Possible values: "up", "down", "init", "admin_down".
+	//
+	// +kubebuilder:validation:Optional
+	RemoteSessionState *string `json:"remoteSessionState,omitempty"`
+
+	// LocalDiagnosticCode is the local diagnostic code explaining the
+	// current session state.
+	//
+	// +kubebuilder:validation:Optional
+	LocalDiagnosticCode *string `json:"localDiagnosticCode,omitempty"`
+
+	// RemoteDiagnosticCode is the remote diagnostic code explaining the
+	// remote session state.
+	//
+	// +kubebuilder:validation:Optional
+	RemoteDiagnosticCode *string `json:"remoteDiagnosticCode,omitempty"`
+
+	// LocalDiscriminator is the local BFD session discriminator.
+	//
+	// +kubebuilder:validation:Optional
+	LocalDiscriminator *int64 `json:"localDiscriminator,omitempty"`
+
+	// RemoteDiscriminator is the remote BFD session discriminator.
+	//
+	// +kubebuilder:validation:Optional
+	RemoteDiscriminator *int64 `json:"remoteDiscriminator,omitempty"`
+
+	// FailureTransitions is the number of times the BFD session has
+	// transitioned to the DOWN state.
+	//
+	// +kubebuilder:validation:Optional
+	FailureTransitions *int64 `json:"failureTransitions,omitempty"`
 }
 
 type BGPFamilyRouteCount struct {

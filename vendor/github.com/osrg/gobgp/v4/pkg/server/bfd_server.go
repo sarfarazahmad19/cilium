@@ -20,6 +20,36 @@ import (
 	"github.com/osrg/gobgp/v4/pkg/packet/bfd"
 )
 
+// bfdStateToAPIState maps bfd.StateType (wire packet constants) to api.BfdSessionState.
+// The p.state atomic stores api.BfdSessionState values (for local state), but
+// p.remoteSessionState stores bfd.StateType values from incoming packets.
+func bfdStateToAPIState(state int32) api.BfdSessionState {
+	switch bfd.StateType(state) {
+	case bfd.StateUp:
+		return api.BfdSessionState_BFD_SESSION_STATE_UP
+	case bfd.StateDown:
+		return api.BfdSessionState_BFD_SESSION_STATE_DOWN
+	case bfd.StateInit:
+		return api.BfdSessionState_BFD_SESSION_STATE_INIT
+	case bfd.StateAdminDown:
+		return api.BfdSessionState_BFD_SESSION_STATE_ADMIN_DOWN
+	default:
+		return api.BfdSessionState_BFD_SESSION_STATE_UNSPECIFIED
+	}
+}
+
+// deriveLocalDiagnostic returns the local diagnostic code based on session state.
+func deriveLocalDiagnostic(state int32) api.BfdDiagnosticCode {
+	switch api.BfdSessionState(state) {
+	case api.BfdSessionState_BFD_SESSION_STATE_DOWN:
+		return api.BfdDiagnosticCode_BFD_DIAGNOSTIC_CODE_DETECTION_TIMEOUT
+	case api.BfdSessionState_BFD_SESSION_STATE_ADMIN_DOWN:
+		return api.BfdDiagnosticCode_BFD_DIAGNOSTIC_CODE_ADMINISTRATIVELY_DOWN
+	default:
+		return api.BfdDiagnosticCode_BFD_DIAGNOSTIC_CODE_NO_DIAGNOSTIC
+	}
+}
+
 type bfdServerStats struct {
 	rxPacket      atomic.Uint64
 	rxDrop        atomic.Uint64
@@ -29,9 +59,10 @@ type bfdServerStats struct {
 }
 
 type bfdEventPeerUpdate struct {
-	isAdd       bool
-	peerAddress netip.Addr
-	config      oc.BfdConfig
+	isAdd         bool
+	peerAddress   netip.Addr
+	config        oc.BfdConfig
+	bindInterface string
 }
 
 type bfdPeerState struct {
@@ -49,7 +80,8 @@ type bfdServer struct {
 
 	config *oc.BfdConfig
 
-	udpServer *net.UDPConn
+	udpServer       *net.UDPConn
+	listenInterface string
 
 	peersMutex sync.RWMutex
 	peers      map[netip.Addr]*bfdPeer
@@ -114,7 +146,7 @@ func (s *bfdServer) Stop() {
 	})
 }
 
-func (s *bfdServer) AddPeer(ctx context.Context, peerAddress netip.Addr, config oc.BfdConfig) error {
+func (s *bfdServer) AddPeer(ctx context.Context, peerAddress netip.Addr, config oc.BfdConfig, bindInterface string) error {
 	if s.stopped.Load() {
 		return errors.New("bfd server stopped")
 	}
@@ -124,7 +156,7 @@ func (s *bfdServer) AddPeer(ctx context.Context, peerAddress netip.Addr, config 
 	}
 
 	select {
-	case s.eventPeerUpdate <- &bfdEventPeerUpdate{isAdd: true, peerAddress: peerAddress, config: config}:
+	case s.eventPeerUpdate <- &bfdEventPeerUpdate{isAdd: true, peerAddress: peerAddress, config: config, bindInterface: bindInterface}:
 		if s.stopped.Load() {
 			return errors.New("bfd server stopped")
 		}
@@ -203,7 +235,7 @@ func (s *bfdServer) loop() {
 			s.config = ev
 		case ev := <-s.eventPeerUpdate:
 			if ev.isAdd {
-				s.addBfdPeer(ev.peerAddress, ev.config)
+				s.addBfdPeer(ev.peerAddress, ev.config, ev.bindInterface)
 			} else {
 				s.deleteBfdPeer(ev.peerAddress)
 			}
@@ -234,6 +266,13 @@ func (s *bfdServer) startServer() {
 
 	var lc net.ListenConfig
 	lc.Control = func(network, address string, sc syscall.RawConn) error {
+		if s.listenInterface != "" {
+			s.logger.Info("binding bfd listener to interface", slog.String("interface", s.listenInterface))
+			if err := netutils.SetBindToDevSockopt(sc, s.listenInterface); err != nil {
+				return err
+			}
+		}
+
 		return netutils.SetReuseAddrSockopt(sc)
 	}
 
@@ -283,7 +322,7 @@ func (s *bfdServer) stop() {
 	)
 }
 
-func (s *bfdServer) addBfdPeer(peerAddress netip.Addr, config oc.BfdConfig) {
+func (s *bfdServer) addBfdPeer(peerAddress netip.Addr, config oc.BfdConfig, bindInterface string) {
 	s.peersMutex.RLock()
 	_, ok := s.peers[peerAddress]
 	s.peersMutex.RUnlock()
@@ -297,7 +336,7 @@ func (s *bfdServer) addBfdPeer(peerAddress netip.Addr, config oc.BfdConfig) {
 		return
 	}
 
-	bfdPeer := NewBfdPeer(s.peerState, s.logger, peerAddress, config)
+	bfdPeer := NewBfdPeer(s.peerState, s.logger, peerAddress, config, bindInterface)
 	if bfdPeer != nil {
 		s.logger.Info("Insert BFD peer",
 			slog.String("Topic", "bfd"),
@@ -347,7 +386,13 @@ func (s *bfdServer) getPeerState(address netip.Addr) *bfdPeerState {
 	return &bfdPeerState{
 		peerAddress: peer.peerAddress,
 		state: api.BfdPeerState{
-			SessionState: api.BfdSessionState(peer.state.Load()),
+			SessionState:        api.BfdSessionState(peer.state.Load()),
+			RemoteSessionState:  bfdStateToAPIState(peer.remoteSessionState.Load()),
+			LocalDiscriminator:  peer.myDiscriminator,
+			RemoteDiscriminator: peer.yourDiscriminator,
+			LocalDiagnosticCode: deriveLocalDiagnostic(peer.state.Load()),
+			RemoteDiagnosticCode: api.BfdDiagnosticCode(peer.remoteDiagnosticCode.Load()),
+			FailureTransitions:  peer.failureTransitions.Load(),
 			BfdAsync: &api.BfdAsyncCounters{
 				ReceivedPackets:    peer.stats.rxPacket.Load(),
 				TransmittedPackets: peer.stats.txPacket.Load(),
@@ -363,7 +408,13 @@ func (s *bfdServer) getPeerStateList() []*bfdPeerState {
 		list = append(list, &bfdPeerState{
 			peerAddress: peer.peerAddress,
 			state: api.BfdPeerState{
-				SessionState: api.BfdSessionState(peer.state.Load()),
+				SessionState:        api.BfdSessionState(peer.state.Load()),
+				RemoteSessionState:  bfdStateToAPIState(peer.remoteSessionState.Load()),
+				LocalDiscriminator:  peer.myDiscriminator,
+				RemoteDiscriminator: peer.yourDiscriminator,
+				LocalDiagnosticCode: deriveLocalDiagnostic(peer.state.Load()),
+				RemoteDiagnosticCode: api.BfdDiagnosticCode(peer.remoteDiagnosticCode.Load()),
+				FailureTransitions:  peer.failureTransitions.Load(),
 				BfdAsync: &api.BfdAsyncCounters{
 					ReceivedPackets:    peer.stats.rxPacket.Load(),
 					TransmittedPackets: peer.stats.txPacket.Load(),

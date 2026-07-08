@@ -305,6 +305,7 @@ func ToNeighborV2(np *v2.CiliumBGPNodePeer, pc *v2.CiliumBGPPeerConfigSpec, pass
 	neighbor.Timers = toNeighborTimersV2(pc.Timers)
 	neighbor.Transport = toNeighborTransportV2(np.LocalAddress, pc.Transport)
 	neighbor.GracefulRestart = toNeighborGracefulRestartV2(pc.GracefulRestart)
+	neighbor.BFD = toNeighborBFDV2(pc.BFD)
 	neighbor.AfiSafis = toNeighborAfiSafisV2(pc.Families)
 
 	return neighbor
@@ -364,6 +365,9 @@ func toNeighborTransportV2(apiLocalAddress *string, apiTransport *v2.CiliumBGPTr
 		if apiTransport.PeerPort != nil {
 			transport.RemotePort = uint32(*apiTransport.PeerPort)
 		}
+		if apiTransport.BindInterface != nil {
+			transport.BindInterface = *apiTransport.BindInterface
+		}
 	}
 
 	return transport
@@ -377,6 +381,36 @@ func toNeighborGracefulRestartV2(apiGR *v2.CiliumBGPNeighborGracefulRestart) *Ne
 		Enabled:     apiGR.Enabled,
 		RestartTime: uint32(*apiGR.RestartTimeSeconds),
 	}
+}
+
+func toNeighborBFDV2(apiBFD *v2.CiliumBGPBFD) *NeighborBFD {
+	if apiBFD == nil || !apiBFD.Enabled {
+		return nil
+	}
+
+	bfd := &NeighborBFD{
+		Enabled: true,
+	}
+
+	if apiBFD.MinimumSendInterval != nil {
+		bfd.MinimumSendInterval = *apiBFD.MinimumSendInterval
+	} else {
+		bfd.MinimumSendInterval = 1000000
+	}
+
+	if apiBFD.MinimumRecvInterval != nil {
+		bfd.MinimumRecvInterval = *apiBFD.MinimumRecvInterval
+	} else {
+		bfd.MinimumRecvInterval = 1000000
+	}
+
+	if apiBFD.Multiplier != nil {
+		bfd.Multiplier = *apiBFD.Multiplier
+	} else {
+		bfd.Multiplier = 3
+	}
+
+	return bfd
 }
 
 func toNeighborAfiSafisV2(families []v2.CiliumBGPFamilyWithAdverts) []*Family {

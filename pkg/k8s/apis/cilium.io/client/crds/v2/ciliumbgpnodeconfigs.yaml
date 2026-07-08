@@ -199,6 +199,48 @@ spec:
                         description: CiliumBGPNodePeerStatus is the status of a BGP
                           peer.
                         properties:
+                          bfdState:
+                            description: |-
+                              BFDState is the state of the BFD session for this peer.
+                              Only present if BFD is configured.
+                            properties:
+                              failureTransitions:
+                                description: |-
+                                  FailureTransitions is the number of times the BFD session has
+                                  transitioned to the DOWN state.
+                                format: int64
+                                type: integer
+                              localDiagnosticCode:
+                                description: |-
+                                  LocalDiagnosticCode is the local diagnostic code explaining the
+                                  current session state.
+                                type: string
+                              localDiscriminator:
+                                description: LocalDiscriminator is the local BFD session
+                                  discriminator.
+                                format: int64
+                                type: integer
+                              remoteDiagnosticCode:
+                                description: |-
+                                  RemoteDiagnosticCode is the remote diagnostic code explaining the
+                                  remote session state.
+                                type: string
+                              remoteDiscriminator:
+                                description: RemoteDiscriminator is the remote BFD
+                                  session discriminator.
+                                format: int64
+                                type: integer
+                              remoteSessionState:
+                                description: |-
+                                  RemoteSessionState is the state of the remote BFD session.
+                                  Possible values: "up", "down", "init", "admin_down".
+                                type: string
+                              sessionState:
+                                description: |-
+                                  SessionState is the current state of the BFD session.
+                                  Possible values: "up", "down", "init", "admin_down".
+                                type: string
+                            type: object
                           establishedTime:
                             description: |-
                               EstablishedTime is the time when the peering session was established.

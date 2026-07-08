@@ -90,13 +90,15 @@ type Neighbor struct {
 	Timers          *NeighborTimers
 	Transport       *NeighborTransport
 	GracefulRestart *NeighborGracefulRestart
+	BFD             *NeighborBFD
 	AfiSafis        []*Family
 }
 
 type NeighborTransport struct {
-	LocalAddress string
-	LocalPort    uint32
-	RemotePort   uint32
+	LocalAddress  string
+	LocalPort     uint32
+	RemotePort    uint32
+	BindInterface string
 }
 
 type NeighborEbgpMultihop struct {
@@ -112,6 +114,13 @@ type NeighborTimers struct {
 type NeighborGracefulRestart struct {
 	Enabled     bool
 	RestartTime uint32
+}
+
+type NeighborBFD struct {
+	Enabled             bool
+	MinimumSendInterval uint32
+	MinimumRecvInterval uint32
+	Multiplier          uint32
 }
 
 // SoftResetDirection defines the direction in which a BGP soft reset should be performed
@@ -195,6 +204,9 @@ type PeerState struct {
 	// Graceful restart capability
 	GracefulRestart BgpGracefulRestart `json:"graceful-restart,omitempty"`
 
+	// BFD state for this peer
+	BFDState PeerBFDState `json:"bfd-state,omitempty"`
+
 	// Capabilities announced by the local peer
 	LocalCapabilities []bgp.ParameterCapabilityInterface `json:"local-capabilities"`
 
@@ -249,6 +261,33 @@ type BgpGracefulRestart struct {
 	// after a restart. After this period, peer will remove stale routes.
 	// (RFC 4724 section 4.2)
 	RestartTime time.Duration `json:"restart-time-nanoseconds,omitempty"`
+}
+
+// PeerBFDState contains BFD session state information for a BGP peer.
+type PeerBFDState struct {
+	// SessionState is the current BFD session state.
+	SessionState string `json:"session-state,omitempty"`
+
+	// RemoteSessionState is the remote BFD session state.
+	RemoteSessionState string `json:"remote-session-state,omitempty"`
+
+	// LocalDiagnosticCode is the local diagnostic code explaining the
+	// current session state.
+	LocalDiagnosticCode string `json:"local-diagnostic-code,omitempty"`
+
+	// RemoteDiagnosticCode is the remote diagnostic code explaining the
+	// remote session state.
+	RemoteDiagnosticCode string `json:"remote-diagnostic-code,omitempty"`
+
+	// LocalDiscriminator is the local BFD session discriminator.
+	LocalDiscriminator uint32 `json:"local-discriminator,omitempty"`
+
+	// RemoteDiscriminator is the remote BFD session discriminator.
+	RemoteDiscriminator uint32 `json:"remote-discriminator,omitempty"`
+
+	// FailureTransitions is the number of times the BFD session has
+	// transitioned to the DOWN state.
+	FailureTransitions uint64 `json:"failure-transitions,omitempty"`
 }
 
 // PathRequest contains parameters for advertising or withdrawing a Path

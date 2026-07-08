@@ -81,6 +81,25 @@ func TestToNeighbor(t *testing.T) {
 			},
 		},
 		{
+			name: "BindInterface",
+			nodePeer: &v2.CiliumBGPNodePeer{
+				PeerAddress: ptr.To("fd00::1"),
+				PeerASN:     ptr.To(int64(64512)),
+			},
+			peerConfig: &v2.CiliumBGPPeerConfigSpec{
+				Transport: &v2.CiliumBGPTransport{
+					BindInterface: ptr.To("eth0"),
+				},
+			},
+			expected: &Neighbor{
+				Address: netip.MustParseAddr("fd00::1"),
+				ASN:     64512,
+				Transport: &NeighborTransport{
+					BindInterface: "eth0",
+				},
+			},
+		},
+		{
 			name: "Timers",
 			nodePeer: &v2.CiliumBGPNodePeer{
 				PeerAddress: ptr.To("fd00::1"),
@@ -261,6 +280,83 @@ func TestToNeighbor(t *testing.T) {
 						Safi: SafiUnicast,
 					},
 				},
+			},
+		},
+		{
+			name: "BFD Enabled with Defaults",
+			nodePeer: &v2.CiliumBGPNodePeer{
+				PeerAddress: ptr.To("10.0.0.1"),
+				PeerASN:     ptr.To(int64(64512)),
+			},
+			peerConfig: &v2.CiliumBGPPeerConfigSpec{
+				BFD: &v2.CiliumBGPBFD{
+					Enabled: true,
+				},
+			},
+			expected: &Neighbor{
+				Address: netip.MustParseAddr("10.0.0.1"),
+				ASN:     64512,
+				BFD: &NeighborBFD{
+					Enabled:             true,
+					MinimumSendInterval: 1000000,
+					MinimumRecvInterval: 1000000,
+					Multiplier:          3,
+				},
+			},
+		},
+		{
+			name: "BFD Enabled with Custom Values",
+			nodePeer: &v2.CiliumBGPNodePeer{
+				PeerAddress: ptr.To("10.0.0.1"),
+				PeerASN:     ptr.To(int64(64512)),
+			},
+			peerConfig: &v2.CiliumBGPPeerConfigSpec{
+				BFD: &v2.CiliumBGPBFD{
+					Enabled:             true,
+					MinimumSendInterval: ptr.To[uint32](500000),
+					MinimumRecvInterval: ptr.To[uint32](2000000),
+					Multiplier:          ptr.To[uint32](5),
+				},
+			},
+			expected: &Neighbor{
+				Address: netip.MustParseAddr("10.0.0.1"),
+				ASN:     64512,
+				BFD: &NeighborBFD{
+					Enabled:             true,
+					MinimumSendInterval: 500000,
+					MinimumRecvInterval: 2000000,
+					Multiplier:          5,
+				},
+			},
+		},
+		{
+			name: "BFD Disabled",
+			nodePeer: &v2.CiliumBGPNodePeer{
+				PeerAddress: ptr.To("10.0.0.1"),
+				PeerASN:     ptr.To(int64(64512)),
+			},
+			peerConfig: &v2.CiliumBGPPeerConfigSpec{
+				BFD: &v2.CiliumBGPBFD{
+					Enabled: false,
+				},
+			},
+			expected: &Neighbor{
+				Address: netip.MustParseAddr("10.0.0.1"),
+				ASN:     64512,
+			},
+		},
+		{
+			name: "BFD Nil",
+			nodePeer: &v2.CiliumBGPNodePeer{
+				PeerAddress: ptr.To("10.0.0.1"),
+				PeerASN:     ptr.To(int64(64512)),
+			},
+			peerConfig: &v2.CiliumBGPPeerConfigSpec{
+				BFD: nil,
+			},
+			expected: &Neighbor{
+				Address: netip.MustParseAddr("10.0.0.1"),
+				ASN:     64512,
 			},
 		},
 	}

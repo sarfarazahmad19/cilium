@@ -63,6 +63,7 @@ type CiliumBGPPeerConfig struct {
 	Status CiliumBGPPeerConfigStatus `json:"status,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="!has(self.bfd) || !self.bfd.enabled || !has(self.ebgpMultihop) || self.ebgpMultihop <= 1",message="BFD is not supported when ebgpMultihop is greater than 1"
 type CiliumBGPPeerConfigSpec struct {
 	// Transport defines the BGP transport parameters for the peer.
 	//
@@ -105,6 +106,15 @@ type CiliumBGPPeerConfigSpec struct {
 	// +kubebuilder:validation:Maximum=255
 	// +kubebuilder:default=1
 	EBGPMultihop *int32 `json:"ebgpMultihop,omitempty"`
+
+	// BFD defines the Bidirectional Forwarding Detection (BFD) parameters
+	// for the peer. BFD provides fast failure detection between adjacent
+	// forwarding engines, independent of the BGP session.
+	//
+	// If not specified, BFD is disabled.
+	//
+	// +kubebuilder:validation:Optional
+	BFD *CiliumBGPBFD `json:"bfd,omitempty"`
 
 	// Families, if provided, defines a set of AFI/SAFIs the speaker will
 	// negotiate with it's peer.
@@ -184,6 +194,16 @@ type CiliumBGPTransport struct {
 	//
 	// +kubebuilder:validation:Optional
 	SourceInterface *string `json:"sourceInterface,omitempty"`
+
+	// BindInterface is the name of a local network interface to bind BGP and BFD
+	// sockets to using SO_BINDTODEVICE. This ensures that traffic uses the correct
+	// interface in multi-NIC environments, which is important for BFD to ensure
+	// source IP addresses match between BGP and BFD sessions.
+	//
+	// If not specified, sockets will be bound to all interfaces.
+	//
+	// +kubebuilder:validation:Optional
+	BindInterface *string `json:"bindInterface,omitempty"`
 }
 
 func (t *CiliumBGPTransport) SetDefaults() {
@@ -265,6 +285,56 @@ func (gr *CiliumBGPNeighborGracefulRestart) SetDefaults() {
 	if gr.RestartTimeSeconds == nil || *gr.RestartTimeSeconds == 0 {
 		gr.RestartTimeSeconds = ptr.To[int32](DefaultBGPGRRestartTimeSeconds)
 	}
+}
+
+// CiliumBGPBFD defines BFD configuration for a BGP peer.
+//
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (self.multiplier >= 2 && self.multiplier <= 255)", message="multiplier must be between 2 and 255 when BFD is enabled"
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (self.minimumSendInterval > 0 && self.minimumRecvInterval > 0)", message="minimumSendInterval and minimumRecvInterval must be positive when BFD is enabled"
+type CiliumBGPBFD struct {
+	// Enabled enables BFD for this peer.
+	//
+	// +kubebuilder:validation:Required
+	Enabled bool `json:"enabled"`
+
+	// MinimumSendInterval is the desired minimum transmission interval
+	// for BFD control packets, in microseconds.
+	//
+	// This interval is the frequency at which the local system would like
+	// to send BFD control packets to the remote system.
+	//
+	// If not specified, defaults to 1000000 (1 second).
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=2147483647
+	MinimumSendInterval *uint32 `json:"minimumSendInterval,omitempty"`
+
+	// MinimumRecvInterval is the required minimum receive interval
+	// for BFD control packets, in microseconds.
+	//
+	// This is the minimum interval between received BFD control packets
+	// that this system is willing to support. A remote peer transmitting
+	// at a faster rate will be detected and the BGP session will be torn down.
+	//
+	// If not specified, defaults to 1000000 (1 second).
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=2147483647
+	MinimumRecvInterval *uint32 `json:"minimumRecvInterval,omitempty"`
+
+	// Multiplier is the detection multiplier for BFD packets.
+	//
+	// The failure detection time is calculated as:
+	//   multiplier * minimumRecvInterval
+	//
+	// If not specified, defaults to 3.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=2
+	// +kubebuilder:validation:Maximum=255
+	Multiplier *uint32 `json:"multiplier,omitempty"`
 }
 
 func (p *CiliumBGPPeerConfigSpec) SetDefaults() {
